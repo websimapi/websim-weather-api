@@ -4,6 +4,7 @@ class UIManager {
         this.temperatureEl = document.getElementById('temperature');
         this.changeBtn = document.getElementById('change-weather-btn');
         this.postModeSelect = document.getElementById('post-mode');
+        this.localRenderToggle = document.getElementById('local-render-toggle');
     }
 
     updateUI(weatherData) {
@@ -17,6 +18,14 @@ class UIManager {
     
     getPostMode() {
         return this.postModeSelect.value;
+    }
+
+    isLocalRenderingEnabled() {
+        return this.localRenderToggle.checked;
+    }
+
+    onLocalRenderToggle(callback) {
+        this.localRenderToggle.addEventListener('change', callback);
     }
 }
 

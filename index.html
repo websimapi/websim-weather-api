@@ -8,7 +8,8 @@
     <script type="importmap">
     {
         "imports": {
-            "three": "https://esm.sh/three"
+            "three": "https://esm.sh/three",
+            "three/addons/": "https://esm.sh/three/examples/jsm/"
         }
     }
     </script>
@@ -28,6 +29,10 @@
                 <option value="data">Send Render Data</option>
                 <option value="script">Send Execution Script</option>
             </select>
+        </div>
+        <div class="options">
+            <input type="checkbox" id="local-render-toggle" checked>
+            <label for="local-render-toggle">Enable Local Rendering</label>
         </div>
     </div>
     <script type="module" src="main.js"></script>

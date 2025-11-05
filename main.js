@@ -13,9 +13,13 @@ function updateAndPostWeather() {
     weatherManager.changeWeather();
     const weatherData = weatherManager.getCurrentWeather();
     
-    // Update the iframe's own UI and 3D scene
+    // Update the iframe's own UI
     uiManager.updateUI(weatherData);
-    sceneManager.updateWeather(weatherData);
+
+    // Update 3D scene only if local rendering is enabled
+    if (uiManager.isLocalRenderingEnabled()) {
+        sceneManager.updateWeather(weatherData);
+    }
 
     // Send the weather data to the parent window
     const mode = uiManager.getPostMode();
@@ -23,15 +27,34 @@ function updateAndPostWeather() {
     postMessageManager.sendMessage(message);
 }
 
+function handleLocalRenderToggle() {
+    const isEnabled = uiManager.isLocalRenderingEnabled();
+    sceneManager.setRendering(isEnabled);
+    if (isEnabled) {
+        // If turning on, sync scene with current weather
+        const weatherData = weatherManager.getCurrentWeather();
+        sceneManager.updateWeather(weatherData);
+    }
+}
+
 // Initial setup
 const initialWeather = weatherManager.getCurrentWeather();
 uiManager.updateUI(initialWeather);
-sceneManager.updateWeather(initialWeather);
+
+if (uiManager.isLocalRenderingEnabled()) {
+    sceneManager.updateWeather(initialWeather);
+} else {
+    sceneManager.setRendering(false);
+}
+
 uiManager.onChangeWeather(updateAndPostWeather);
+uiManager.onLocalRenderToggle(handleLocalRenderToggle);
 
 function animate() {
     requestAnimationFrame(animate);
-    sceneManager.animate();
+    if (uiManager.isLocalRenderingEnabled()) {
+        sceneManager.animate();
+    }
 }
 
 animate();
