@@ -5,6 +5,11 @@ class WeatherManager {
         this.currentWeather = {
             condition: 'Sunny',
             temperature: 25,
+            timeOfDay: 12, // 0-24 hours
+            wind: {
+                speed: 5, // m/s
+                direction: { x: 1, y: 0, z: 0 }
+            }
         };
     }
 
@@ -31,7 +36,23 @@ class WeatherManager {
         this.currentWeather = {
             condition: newCondition,
             temperature: newTemp,
+            timeOfDay: Math.random() * 24,
+            wind: {
+                speed: Math.random() * 5, // 0-5 m/s
+                direction: {
+                    x: Math.random() * 2 - 1,
+                    y: 0, // No vertical wind for now
+                    z: Math.random() * 2 - 1
+                }
+            }
         };
+        // Normalize wind direction
+        const dir = this.currentWeather.wind.direction;
+        const mag = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
+        if (mag > 0) {
+            dir.x /= mag;
+            dir.z /= mag;
+        }
     }
 
     createPostMessage(mode) {
@@ -45,7 +66,9 @@ class WeatherManager {
         const data = this.currentWeather;
         const renderInfo = {
             backgroundColor: '',
-            elements: []
+            elements: [],
+            timeOfDay: data.timeOfDay,
+            wind: data.wind
         };
         
         switch(data.condition) {
@@ -77,6 +100,8 @@ class WeatherManager {
             payload: {
                 description: `Script for ${data.condition} at ${data.temperature}°C`,
                 actions: [
+                    { command: 'setTime', args: { timeOfDay: data.timeOfDay } },
+                    { command: 'setWind', args: { speed: data.wind.speed, direction: data.wind.direction } },
                     { command: 'setBackground', args: { color: this.getBackgroundColorForCondition(data.condition) } },
                     { command: 'clearSceneElements', args: {} },
                     ...this.getSceneElementsForCondition(data),

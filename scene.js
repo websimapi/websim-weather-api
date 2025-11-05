@@ -7,6 +7,8 @@ class SceneManager {
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+        this.clock = new THREE.Clock();
+        this.wind = { speed: 0, direction: new THREE.Vector3(0,0,0) };
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.namedObjects = new Map();
@@ -22,12 +24,17 @@ class SceneManager {
         this.controls.update();
 
         // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
         this.scene.add(ambientLight);
+        this.namedObjects.set('ambientLight', ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(50, 50, 50);
-        this.scene.add(directionalLight);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        this.scene.add(sunLight);
+        this.namedObjects.set('sunLight', sunLight);
+
+        const moonLight = new THREE.DirectionalLight(0xeeeeff, 0.2);
+        this.scene.add(moonLight);
+        this.namedObjects.set('moonLight', moonLight);
 
         // Sun
         const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
@@ -36,6 +43,13 @@ class SceneManager {
         sun.position.set(30, 20, -50);
         this.scene.add(sun);
         this.namedObjects.set('sun', sun);
+
+        // Moon
+        const moonGeometry = new THREE.SphereGeometry(2.5, 32, 32);
+        const moonMaterial = new THREE.MeshBasicMaterial({ color: 0xd3d3d3 });
+        const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+        this.scene.add(moon);
+        this.namedObjects.set('moon', moon);
 
         // Ground
         const groundGeometry = new THREE.PlaneGeometry(200, 200);
@@ -63,7 +77,7 @@ class SceneManager {
     clearDynamicElements() {
         const toRemove = [];
         this.namedObjects.forEach((obj, name) => {
-            if (name !== 'ground' && name !== 'sun') {
+            if (name !== 'ground' && name !== 'sun' && name !== 'moon' && name !== 'sunLight' && name !== 'moonLight' && name !== 'ambientLight') {
                 toRemove.push(obj);
             }
         });
@@ -104,43 +118,82 @@ class SceneManager {
         this.scene.add(particles);
     }
 
-    updateWeather(weatherData) {
+    updateTimeOfDay(timeOfDay) {
+        // timeOfDay is 0-24
+        const angle = ((timeOfDay - 6) / 24) * 2 * Math.PI; // Full circle in 24h, offset so 6am is sunrise
+        const radius = 100;
+
         const sun = this.namedObjects.get('sun');
+        const sunLight = this.namedObjects.get('sunLight');
+        sun.position.x = Math.cos(angle) * radius;
+        sun.position.y = Math.sin(angle) * radius;
+        sun.position.z = -50;
+        sunLight.position.copy(sun.position);
+
+        const moon = this.namedObjects.get('moon');
+        const moonLight = this.namedObjects.get('moonLight');
+        moon.position.x = -sun.position.x;
+        moon.position.y = -sun.position.y;
+        moon.position.z = -50;
+        moonLight.position.copy(moon.position);
+
+        sun.visible = sun.position.y > -10;
+        sunLight.intensity = Math.max(0, sun.position.y / radius) * 1.5;
+        
+        moon.visible = moon.position.y > -10;
+        moonLight.intensity = Math.max(0, moon.position.y / radius) * 0.2;
+
+        const ambientLight = this.namedObjects.get('ambientLight');
+        ambientLight.intensity = Math.max(0.1, (sun.position.y + radius*0.2) / (radius * 1.2)) * 0.4;
+
+        const dayColor = new THREE.Color(0x87CEEB);
+        const nightColor = new THREE.Color(0x000033);
+        const t = Math.max(0, sun.position.y / radius);
+        this.scene.background = new THREE.Color().lerpColors(nightColor, dayColor, t);
+    }
+
+    updateWeather(weatherData) {
+        this.wind.speed = weatherData.wind.speed;
+        this.wind.direction.set(weatherData.wind.direction.x, weatherData.wind.direction.y, weatherData.wind.direction.z);
+        this.updateTimeOfDay(weatherData.timeOfDay);
+        
         this.clearDynamicElements();
 
         switch (weatherData.condition) {
             case 'Sunny':
-                this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
-                if (sun) sun.visible = true;
+                // Handled by updateTimeOfDay
                 break;
             case 'Rainy':
-                this.scene.background = new THREE.Color(0x778899); // Light slate gray
-                if (sun) sun.visible = false;
                 this.addParticleSystem('rain', 0xADD8E6, 500);
                 break;
             case 'Snowy':
-                this.scene.background = new THREE.Color(0xDCDCDC); // Gainsboro
-                if (sun) sun.visible = false;
                 this.addParticleSystem('snow', 0xFFFFFF, 500);
                 break;
             default:
-                this.scene.background = new THREE.Color(0x87CEEB);
-                if (sun) sun.visible = true;
+                // Default to sunny
         }
     }
 
     animate() {
         if (!this.isRendering) return;
+        const delta = this.clock.getDelta();
 
         this.controls.update();
 
         this.namedObjects.forEach((obj) => {
             if (obj.userData.isParticleSystem) {
                 const positions = obj.geometry.attributes.position.array;
-                for (let i = 1; i < positions.length; i += 3) {
-                    positions[i] -= 0.1; // Move down
-                    if (positions[i] < -10) {
-                        positions[i] = 100; // Reset to top
+                const windEffect = this.wind.direction.clone().multiplyScalar(this.wind.speed * delta);
+                
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i] += windEffect.x;
+                    positions[i+1] -= 0.1 + Math.random() * 0.1; // Gravity + some randomness
+                    positions[i+2] += windEffect.z;
+                    
+                    if (positions[i+1] < -10) {
+                        positions[i] = Math.random() * 200 - 100;
+                        positions[i+1] = 100; // Reset to top
+                        positions[i+2] = Math.random() * 100 - 50;
                     }
                 }
                 obj.geometry.attributes.position.needsUpdate = true;
